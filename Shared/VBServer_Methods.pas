@@ -350,9 +350,39 @@ begin
 end;
 
 procedure TVBServerMethods.conFBBeforeConnect(Sender: TObject);
+var
+  ConIniFile: TIniFile;
+  SLIni: TStringList;
+  SectionName: string;
 begin
-  conFB.Params.Clear;
-  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
+//  conFB.Params.Clear;
+//  conFB.Params.LoadFromFile('C:\Data\Firebird\VB\ConnectionDefinitions.ini');
+//  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
+
+  SLIni := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  SectionName := 'VB';
+    ConIniFile := TIniFile.Create(CONNECTION_DEFINITION_FILE);
+
+  try
+    if SameText(RUtils.GetComputer, 'CVG-NB') then
+      SectionName := 'VB Dev';
+
+    ConIniFile.ReadSectionValues(SectionName, SLIni);
+    conFB.Params.Values['Driver'] := SLIni.Values['DriverID'];
+    conFB.Params.Values['Server'] := SLIni.Values['Server'];
+    conFB.Params.Values['Database'] := SLIni.Values['Database'];
+    conFB.Params.Values['User_Name'] := SLIni.Values['User_Name'];
+    conFB.Params.Values['Password'] := SLIni.Values['Password'];
+    conFB.Params.Values['Protocol'] := SLIni.Values['Protocol'];
+    conFB.Params.Values['Pooled'] := SLIni.Values['Pooled'];
+    conFB.Params.Values['CharacterSet'] := SLIni.Values['CharacterSet'];
+    conFB.Params.Values['CreateDatabase'] := SLIni.Values['CreateDatabase'];
+    conFB.ResourceOptions.AssignedValues := [rvAutoReconnect];
+    conFB.ResourceOptions.AutoReconnect := StringToBoolean(SLIni.Values['ResourceOptions.AutoReconnect']);
+  finally
+    SLIni.Free;
+    ConIniFile.Free;
+  end;
 end;
 
 procedure TVBServerMethods.conFBError(ASender, AInitiator: TObject; var AException: Exception);
@@ -479,7 +509,7 @@ begin
   SLIni := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
   IniFile := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'VSServiceX.ini');
   Response := '';
-  Result :=  nil;
+  Result := nil;
 
   try
     SL.DelimitedText := Request;
