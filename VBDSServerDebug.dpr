@@ -7,11 +7,11 @@ uses
   Main_Frm in 'General\Main_Frm.pas' {MainFrm},
   VBServer_Methods in 'Shared\VBServer_Methods.pas' {VBServerMethods: TDSServerModule},
   VBServer_Container in 'General\VBServer_Container.pas' {VBServerContainer: TDataModule},
-  RUtils in '..\..\..\Lib\RUtils.pas',
   Vcl.Themes,
   Vcl.Styles,
   MyClasses in '..\..\..\Lib\MyClasses.pas',
-  CommonServiceValues in '..\..\..\Lib\CommonServiceValues.pas';
+  CommonServiceValues in '..\..\..\Lib\CommonServiceValues.pas',
+  RUtils in '..\..\..\Lib\RUtils.pas';
 
 {$R *.res}
 

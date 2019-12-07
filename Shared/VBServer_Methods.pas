@@ -52,6 +52,7 @@ type
     function TestType(Request: string; var Response: string): string;
     function EchoString(Request: string; var Response: string): string;
     function ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
+    function GetNextID(GeneratorName: string): string;
 // SOAP Method for downloading files
 //    function DownloadFile(Request: string; var Response: string): TByteDynArray;
   end;
@@ -361,7 +362,7 @@ begin
 
   SLIni := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
   SectionName := 'VB';
-    ConIniFile := TIniFile.Create(CONNECTION_DEFINITION_FILE);
+  ConIniFile := TIniFile.Create(CONNECTION_DEFINITION_FILE);
 
   try
     if SameText(RUtils.GetComputer, 'CVG-NB') then
@@ -499,6 +500,15 @@ begin
   end;
 end;
 
+function TVBServerMethods.GetNextID(GeneratorName: string): string;
+const
+  LAST_ID = 'SELECT GEN_ID(%s, 1) AS ID FROM RDB$DATABASE';
+begin
+  qrySQL.Close;
+  qrySQL.Open(Format(LAST_ID, [GeneratorName]));
+  Result := IntToStr(qrySQL.FieldByName('ID').AsInteger);
+end;
+
 function TVBServerMethods.DownloadFile(Request: string; var Response: string; var Size: Int64): TStream;
 var
   SL, SLIni: TStringList;
@@ -537,6 +547,8 @@ begin
     SLIni.Free;
   end;
 end;
+
+
 
 // SOAP Method for downloading files
 //function TVBServerMethods.DownloadFile(Request: string; var Response: string): TByteDynArray;
