@@ -9,9 +9,9 @@ uses
   VBServer_Container in 'General\VBServer_Container.pas' {VBServerContainer: TDataModule},
   Vcl.Themes,
   Vcl.Styles,
-  MyClasses in '..\..\..\Lib\MyClasses.pas',
   CommonServiceValues in '..\..\..\Lib\CommonServiceValues.pas',
-  RUtils in '..\..\..\Lib\RUtils.pas';
+  RUtils in '..\..\..\Lib\RUtils.pas',
+  MyClasses in '..\..\..\Lib\Classes\MyClasses.pas';
 
 {$R *.res}
 

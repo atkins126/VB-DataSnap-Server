@@ -1,14 +1,14 @@
-program VBDSServiceX;
+program VBService;
 
 uses
   Vcl.SvcMgr,
-  RUtils in '..\..\..\Lib\RUtils.pas',
-  CommonServiceValues in '..\..\..\Lib\CommonServiceValues.pas',
-  VBServer_Methods in 'Shared\VBServer_Methods.pas' {VBServerMethods: TDSServerModule},
-  VBServer_Container in 'Service\VBServer_Container.pas' {VBDSServerX: TService},
-  MyClasses in '..\..\..\Lib\Classes\MyClasses.pas';
+  VBService_Container in 'VBService_Container.pas' {VBDSService: TService},
+  VBServer_Methods in '..\Shared\VBServer_Methods.pas' {VBServerMethods: TDSServerModule},
+  CommonServiceValues in '..\..\..\..\Lib\CommonServiceValues.pas',
+  RUtils in '..\..\..\..\Lib\RUtils.pas',
+  MyClasses in '..\..\..\..\Lib\Classes\MyClasses.pas';
 
-{$R *.res}
+{$R *.RES}
 
 begin
   // Windows 2003 Server requires StartServiceCtrlDispatcher to be
@@ -27,8 +27,7 @@ begin
   //
   if not Application.DelayInitialize or Application.Installing then
     Application.Initialize;
-
-  Application.CreateForm(TVBDSServerX, VBDSServerX);
+  Application.CreateForm(TVBDSService, VBDSService);
   Application.Run;
 end.
 

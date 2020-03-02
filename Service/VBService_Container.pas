@@ -1,32 +1,30 @@
-unit VBServer_Container;
+unit VBService_Container;
 
 interface
 
 uses
-  System.SysUtils, System.Classes, Vcl.SvcMgr, System.Win.Registry,
-  DataSnap.DSTCPServerTransport, DataSnap.DSHTTPCommon, DataSnap.DSHTTP,
-  DataSnap.DSServer, DataSnap.DSCommonServer, IPPeerServer, IPPeerAPI,
-  DataSnap.DSAuth, DbxSocketChannelNative, DbxCompressionFilter;
+System.SysUtils, System.Classes, Vcl.SvcMgr, System.Win.Registry,
+Datasnap.DSTCPServerTransport,
+  Datasnap.DSHTTPCommon, Datasnap.DSHTTP, Datasnap.DSServer, Datasnap.DSCommonServer,
+  IPPeerServer, IPPeerAPI, Datasnap.DSAuth,DbxSocketChannelNative,
+  DbxCompressionFilter;
 
 type
-  TVBDSServerX = class(TService)
+  TVBDSService = class(TService)
     DSServer: TDSServer;
     DSTCPServerTransport: TDSTCPServerTransport;
     DSHTTPService: TDSHTTPService;
     DSAuthenticationManager: TDSAuthenticationManager;
     DSServerClass: TDSServerClass;
-    procedure ServiceStart(Sender: TService; var Started: Boolean);
-    procedure ServiceAfterInstall(Sender: TService);
-
     procedure DSServerClassGetClass(DSServerClass: TDSServerClass;
       var PersistentClass: TPersistentClass);
-
     procedure DSAuthenticationManagerUserAuthorize(Sender: TObject;
       EventObject: TDSAuthorizeEventObject; var valid: Boolean);
-
     procedure DSAuthenticationManagerUserAuthenticate(Sender: TObject;
       const Protocol, Context, User, Password: string; var valid: Boolean;
       UserRoles: TStrings);
+    procedure ServiceStart(Sender: TService; var Started: Boolean);
+    procedure ServiceAfterInstall(Sender: TService);
   private
     { Private declarations }
   protected
@@ -39,7 +37,7 @@ type
   end;
 
 var
-  VBDSServerX: TVBDSServerX;
+  VBDSService: TVBDSService;
 
 implementation
 
@@ -51,13 +49,13 @@ uses
   Winapi.Windows,
   VBServer_Methods;
 
-procedure TVBDSServerX.DSServerClassGetClass(
+procedure TVBDSService.DSServerClassGetClass(
   DSServerClass: TDSServerClass; var PersistentClass: TPersistentClass);
 begin
-  PersistentClass := VBServer_Methods.TVBServerMethods;
+  PersistentClass := VBServer_Methods.TVBServerMethods;; //ServerMethodsUnit1.TServerMethods1;
 end;
 
-procedure TVBDSServerX.DSAuthenticationManagerUserAuthenticate(
+procedure TVBDSService.DSAuthenticationManagerUserAuthenticate(
   Sender: TObject; const Protocol, Context, User, Password: string;
   var valid: Boolean; UserRoles: TStrings);
 begin
@@ -66,7 +64,7 @@ begin
   valid := True;
 end;
 
-procedure TVBDSServerX.DSAuthenticationManagerUserAuthorize(
+procedure TVBDSService.DSAuthenticationManagerUserAuthorize(
   Sender: TObject; EventObject: TDSAuthorizeEventObject;
   var valid: Boolean);
 begin
@@ -79,43 +77,43 @@ end;
 
 procedure ServiceController(CtrlCode: DWord); stdcall;
 begin
-  VBDSServerX.Controller(CtrlCode);
+  VBDSService.Controller(CtrlCode);
 end;
 
-function TVBDSServerX.GetServiceController: TServiceController;
+function TVBDSService.GetServiceController: TServiceController;
 begin
   Result := ServiceController;
 end;
 
-function TVBDSServerX.DoContinue: Boolean;
+function TVBDSService.DoContinue: Boolean;
 begin
   Result := inherited;
   DSServer.Start;
 end;
 
-procedure TVBDSServerX.DoInterrogate;
+procedure TVBDSService.DoInterrogate;
 begin
   inherited;
 end;
 
-function TVBDSServerX.DoPause: Boolean;
+function TVBDSService.DoPause: Boolean;
 begin
   DSServer.Stop;
   Result := inherited;
 end;
 
-function TVBDSServerX.DoStop: Boolean;
+function TVBDSService.DoStop: Boolean;
 begin
   DSServer.Stop;
   Result := inherited;
 end;
 
-procedure TVBDSServerX.ServiceStart(Sender: TService; var Started: Boolean);
+procedure TVBDSService.ServiceStart(Sender: TService; var Started: Boolean);
 begin
   DSServer.Start;
 end;
 
-procedure TVBDSServerX.ServiceAfterInstall(Sender: TService);
+procedure TVBDSService.ServiceAfterInstall(Sender: TService);
 var
   RegKey: TRegistry;
 begin
@@ -126,7 +124,7 @@ begin
     if RegKey.OpenKey('\SYSTEM\CurrentControlSet\Services\' + Name, False) then
     begin
       RegKey.WriteString('Description',
-        'VB DataSnap service(X). This is the primary service' +
+        'VB DataSnap service. This is the primary service' +
         ' used to give clients access to the VB service remote invokable methods.');
       RegKey.CloseKey;
     end;
