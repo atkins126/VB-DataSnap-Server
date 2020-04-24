@@ -31,6 +31,7 @@ type
     qrySQL: TFDQuery;
     cmdGeneric: TFDCommand;
     sprGeneric: TFDStoredProc;
+    trnFB: TFDTransaction;
     procedure DSServerModuleCreate(Sender: TObject);
     procedure DSServerModuleDestroy(Sender: TObject);
     procedure conFBBeforeConnect(Sender: TObject);
@@ -47,8 +48,7 @@ type
   public
     { Public declarations }
     function GetData(Request, ParameterList, Generatorname, Tablename, DataSetName: string; var Response: string): TFDJSONDataSets;
-    function ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var Response: string; GeneratorName, TableName: string): string;
-    function ExecuteSQLCommand(Request: string; var Reponse: string): string;
+    function ExecuteSQLCommand(Request: string): string;
     function GetFileVersion(Request: string; var Response: string): string;
     function DownloadFile(Request: string; var Response: string; var Size: Int64): TStream;
     function TestType(Request: string; var Response: string): string;
@@ -56,8 +56,10 @@ type
     function ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
     function GetNextID(GeneratorName: string): string;
     function GetUseCount(Request: string): string;
-// SOAP Method for downloading files
-//    function DownloadFile(Request: string; var Response: string): TByteDynArray;
+    function GetFieldValue(Request: string; FieldType: TFieldType): string;
+
+    function ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var ReplyMessage: string;
+      GeneratorName, TableName: string; ScriptID: Integer): string;
   end;
   {$METHODINFO Off}
 
@@ -73,16 +75,6 @@ uses
 
 { TVBServerMethods }
 
-//function TVBServerMethods.GetData(Request, ParameterList: string; var Response: string): TFDJSONDataSets;
-//var
-//  SL: TStringList;
-//begin
-//  SL := RUtils.CreateStringList(SL, PIPE);
-//  SL.DelimitedText := Request;
-//  Result := SL.Values['REQUEST'];
-//  Response := 'Request = ' + Request + '  RESPONSE=SUCCESS';
-//end;
-
 procedure TVBServerMethods.DSServerModuleCreate(Sender: TObject);
 begin
   FSLObject := TStringList.Create;
@@ -95,65 +87,64 @@ end;
 
 function TVBServerMethods.TestType(Request: string; var Response: string): string;
 var
-  SL: TStringList;
+  InputList: TStringList;
 begin
-  SL := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SL.DelimitedText := Request;
-  Result := SL.Values['REQUEST'];
+  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+  InputList.DelimitedText := Request;
+  Result := InputList.Values['REQUEST'];
   Response := 'SUCCESS';
 end;
 
 function TVBServerMethods.GetData(Request, ParameterList, Generatorname, Tablename, DataSetName: string; var Response: string): TFDJSONDataSets;
 var
-  SL, SLScriptID, SLParameterList, SLParameter, SLDataSetName: TStringList;
+  InputList, ScriptIDList, ParameterListing, SingleParameter, DataSetNameList: TStringList;
   I, X: Integer;
   Query: TFDQuery;
   SQL, TheDataSetName: string;
 begin
   { Notes to developer:
 
-    1. See the SCRIPT_GROUP and SCRIPT tables.
-
     2. The request for data comes from the client in the form of delimited string
        values.
 
-    3. SL contains the full un-parsed request string.
+    3. InputList contains the full un-parsed request string.
 
-    4. SLScriptID contains the list of ID's used to retrieve the SQL statement
+    4. ScriptIDList contains the list of ID's used to retrieve the SQL statement
        needed to fetch data from the server.
   }
+
   Response := '';
-  SL := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SLScriptID := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
-  SLParameterList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SLParameter := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
-  SLDataSetName := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+  ScriptIDList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  ParameterListing := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+  SingleParameter := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
+  DataSetNameList := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
 
   try
-    SL.DelimitedText := Request;
-    SLParameterList.DelimitedText := ParameterList;
-    SLParameter.DelimitedText := SLParameterList.Values['PARAMETER_LIST'];
+    InputList.DelimitedText := Request;
+    ParameterListing.DelimitedText := ParameterList;
+    SingleParameter.DelimitedText := ParameterListing.Values['PARAMETER_LIST'];
 
-    for I := SLParameter.Count - 1 downto 0 do
-      if Length(SLParameter[I]) = 0 then
-        SLParameter.Delete(I);
+    for I := SingleParameter.Count - 1 downto 0 do
+      if Length(SingleParameter[I]) = 0 then
+        SingleParameter.Delete(I);
 
     // Create the Dataset list that will contain the data to be passed back to
     // the client.
     Result := TFDJSONDataSets.Create;
     FSLObject.Clear;
 
-    SLScriptID.DelimitedText := SL.Values['SQL_STATEMENT_ID'];
+    ScriptIDList.DelimitedText := InputList.Values['SQL_STATEMENT_ID'];
     // Iterate the list of ID's to retriev the SQL Statements.
-    for I := 0 to SLScriptID.Count - 1 do
+    for I := 0 to ScriptIDList.Count - 1 do
     begin
-      qrySQL.Open(Format(SQL_STATEMENT, [SLScriptID[I]]));
+      qrySQL.Open(Format(SQL_STATEMENT, [ScriptIDList[I]]));
       // Code added by CVG on 26/06/2019. This is to accommodate datasets
       // with different names but getting their data from the same DB table
       // on the client side.
-      SLDataSetName.DelimitedText := qrySQL.FieldByName('DATASET_NAME').AsString;
-      for X := 0 to SLDataSetName.Count - 1 do
-        if SameText(DataSetName, SLDataSetName[X]) then
+      DataSetNameList.DelimitedText := qrySQL.FieldByName('DATASET_NAME').AsString;
+      for X := 0 to DataSetNameList.Count - 1 do
+        if SameText(DataSetName, DataSetNameList[X]) then
         begin
           TheDataSetName := DataSetname; // qrySQL.FieldByName('DATASET_NAME').AsString;
           Break;
@@ -184,8 +175,8 @@ begin
       Query := (StringToComponent(FSLObject[I]) as TFDQuery);
       SQL := qrySQL.FieldByName('SQL_STATEMENT').AsString;
 
-      if SLParameter.Count > 0 then
-        SQL := Format(SQL, BuildFormatArray(SLParameter.Count, SLParameter));
+      if SingleParameter.Count > 0 then
+        SQL := Format(SQL, BuildFormatArray(SingleParameter.Count, SingleParameter));
 
       Query.Open(SQL);
       if Query.IsEmpty then
@@ -194,14 +185,15 @@ begin
       TFDJSONDataSetsWriter.ListAdd(Result, Query.Name, Query);
     end;
   finally
-    SL.Free;
-    SLScriptID.Free;
-    SLParameterList.Free;
-    SLParameter.Free;
+    InputList.Free;
+    ScriptIDList.Free;
+    ParameterListing.Free;
+    SingleParameter.Free;
   end;
 end;
 
-function TVBServerMethods.ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var Response: string; GeneratorName, TableName: string): string;
+function TVBServerMethods.ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var ReplyMessage: string;
+  GeneratorName, TableName: string; ScriptID: Integer): string;
 var
   LApply: IFDJSONDeltasApplyUpdates;
   ListCount, I, ErrorCount: Integer;
@@ -221,7 +213,7 @@ begin
   // Get a count of the number of datasets to be updated.
   ListCount := LApply.Count;
 
-  conFB.StartTransaction;
+//  conFB.StartTransaction;
   FSLObject.Clear;
 
   try
@@ -229,8 +221,13 @@ begin
     begin
       // Get the Query name for the dataset that is used to transact.
       S := LApply.Items[I].Key;
+
+//      SQL := Format(SQL_DATASET_NAME, [AnsiQuotedStr(AnsiUpperCase(S), '''')]);
+      SQL := Format(SQL_STATEMENT, [ScriptID.ToString]);
+
       // Get the SQL statement used to generate field data.
-      qrySQL.Open(Format(SQL_DATASET_NAME, [AnsiQuotedStr(AnsiUpperCase(S), '''')]));
+//      qrySQL.Open(Format(SQL_DATASET_NAME, [AnsiQuotedStr(AnsiUpperCase(S), '''')]));
+      qrySQL.Open(Format(SQL_STATEMENT, [ScriptID.ToString]));
       SQL := qrySQL.FieldByName('SQL_STATEMENT').AsString;
       // Create the query that will be used to perform the transaction.
       Query := TFDQuery.Create(nil);
@@ -264,14 +261,16 @@ begin
 //      try
       ErrorCount := LApply.ApplyUpdates(S, Query.Command);
       ApplyErrors := LApply.Errors;
-      ErrorList.AddStrings(ApplyErrors.Strings);
-//      Result := ErrorList.Text;
-      Result := ParseServerErrorMsg(ErrorList.Text);
+      ErrorList.AddStrings(ApplyErrors.Strings)
 
-      if ErrorCount = 0 then
-        conFB.Commit
-      else
-        conFB.Rollback;
+//      Result := ErrorList.Text;
+//      Result := ParseServerErrorMsg(ErrorList.Text);
+
+//      if ErrorCount = 0 then
+//        conFB.Commit
+//      else
+//        conFB.Rollback;
+
 //      except
 //        begin
 ////          ErrorMsg := ErrorMsg + ' ' + E.Message;
@@ -289,6 +288,16 @@ begin
 //        end;
 //      end;
     end;
+
+    if ErrorCount > 0 then
+      Result := 'RESPONSE=ERROR|ERROR_MESSAGE=' + ParseServerErrorMsg(ErrorList.Text)
+    else
+      Result := 'RESPONSE=SUCCESS';
+
+//    if ErrorCount = 0 then
+//      conFB.Commit
+//    else
+//      conFB.Rollback;
   finally
 //    Result := FErrorMsg;
   end;
@@ -319,15 +328,17 @@ begin
   Response := Response + ' ' + R.ToString;
 end;
 
-function TVBServerMethods.ExecuteSQLCommand(Request: string; var Reponse: string): string;
-var
-  SL: TStringList;
+function TVBServerMethods.ExecuteSQLCommand(Request: string): string;
+//var
+//  InputList: TStringList;
 begin
-  SL := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SL.DelimitedText := Request;
+//  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+//  InputList.DelimitedText := Request;
 
   cmdGeneric.CommandText.Clear;
-  cmdGeneric.CommandText.Add(SL.Values['REQUEST']);
+  cmdGeneric.CommandText.Add(Request);
+//  cmdGeneric.CommandText.Add(InputList.Values['REQUEST']);
+//  try
   conFB.StartTransaction;
   try
     cmdGeneric.Execute;
@@ -339,19 +350,22 @@ begin
       conFB.Rollback;
     end;
   end;
+//  finally
+//    InputList.Free;
+//  end;
 end;
 
 function TVBServerMethods.ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
 var
-  SL: TStringList;
+  InputList: TStringList;
 begin
   Result := 'RESPONSE=SUCCESS';
 
-  SL := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
   try
     if Length(Trim(ParameterList)) > 0 then
     begin
-      SL.DelimitedText := ParameterList;
+      InputList.DelimitedText := ParameterList;
       sprGeneric.Close;
       sprGeneric.StoredProcName := '';
       sprGeneric.Params.Clear;
@@ -371,15 +385,15 @@ begin
 
       if SameText(ProcedureName, 'SP_GEN_BILLABLE_SUMMARY_TABLE') then
       begin
-        sprGeneric.ParamByName('USER_ID').Value := SL[0];
-        sprGeneric.ParamByName('THE_PERIOD').Value := SL[1];
+        sprGeneric.ParamByName('USER_ID').Value := InputList[0];
+        sprGeneric.ParamByName('THE_PERIOD').Value := InputList[1];
       end
 
       else if SameText(ProcedureName, 'SP_DELETE_ZERO_BILLABLE_VALUES') then
-        sprGeneric.ParamByName('USER_ID').Value := SL[0];
+        sprGeneric.ParamByName('USER_ID').Value := InputList[0];
     end;
   finally
-    SL.Free;
+    InputList.Free;
   end;
 
   try
@@ -397,14 +411,14 @@ end;
 procedure TVBServerMethods.conFBBeforeConnect(Sender: TObject);
 var
   ConIniFile: TIniFile;
-  SLIni: TStringList;
+  IniList: TStringList;
   SectionName: string;
 begin
 //  conFB.Params.Clear;
 //  conFB.Params.LoadFromFile('C:\Data\Firebird\VB\ConnectionDefinitions.ini');
 //  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
 
-  SLIni := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  IniList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
   SectionName := 'VB';
   ConIniFile := TIniFile.Create(CONNECTION_DEFINITION_FILE);
 
@@ -412,20 +426,20 @@ begin
     if SameText(RUtils.GetComputer, 'CVG-NB') then
       SectionName := 'VB Dev';
 
-    ConIniFile.ReadSectionValues(SectionName, SLIni);
-    conFB.Params.Values['Driver'] := SLIni.Values['DriverID'];
-    conFB.Params.Values['Server'] := SLIni.Values['Server'];
-    conFB.Params.Values['Database'] := SLIni.Values['Database'];
-    conFB.Params.Values['User_Name'] := SLIni.Values['User_Name'];
-    conFB.Params.Values['Password'] := SLIni.Values['Password'];
-    conFB.Params.Values['Protocol'] := SLIni.Values['Protocol'];
-    conFB.Params.Values['Pooled'] := SLIni.Values['Pooled'];
-    conFB.Params.Values['CharacterSet'] := SLIni.Values['CharacterSet'];
-    conFB.Params.Values['CreateDatabase'] := SLIni.Values['CreateDatabase'];
+    ConIniFile.ReadSectionValues(SectionName, IniList);
+    conFB.Params.Values['Driver'] := IniList.Values['DriverID'];
+    conFB.Params.Values['Server'] := IniList.Values['Server'];
+    conFB.Params.Values['Database'] := IniList.Values['Database'];
+    conFB.Params.Values['User_Name'] := IniList.Values['User_Name'];
+    conFB.Params.Values['Password'] := IniList.Values['Password'];
+    conFB.Params.Values['Protocol'] := IniList.Values['Protocol'];
+    conFB.Params.Values['Pooled'] := IniList.Values['Pooled'];
+    conFB.Params.Values['CharacterSet'] := IniList.Values['CharacterSet'];
+    conFB.Params.Values['CreateDatabase'] := IniList.Values['CreateDatabase'];
     conFB.ResourceOptions.AssignedValues := [rvAutoReconnect];
-    conFB.ResourceOptions.AutoReconnect := StringToBoolean(SLIni.Values['ResourceOptions.AutoReconnect']);
+    conFB.ResourceOptions.AutoReconnect := StringToBoolean(IniList.Values['ResourceOptions.AutoReconnect']);
   finally
-    SLIni.Free;
+    IniList.Free;
     ConIniFile.Free;
   end;
 end;
@@ -445,28 +459,71 @@ begin
   end;
 end;
 
+function TVBServerMethods.GetFieldValue(Request: string; FieldType: TFieldType): string;
+begin
+
+//  TFieldType = (ftUnknown, ftString, ftSmallint, ftInteger, ftWord, // 0..4
+//    ftBoolean, ftFloat, ftCurrency, ftBCD, ftDate, ftTime, ftDateTime, // 5..11
+//    ftBytes, ftVarBytes, ftAutoInc, ftBlob, ftMemo, ftGraphic, ftFmtMemo, // 12..18
+//    ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, ftFixedChar, ftWideString, // 19..24
+//    ftLargeint, ftADT, ftArray, ftReference, ftDataSet, ftOraBlob, ftOraClob, // 25..31
+//    ftVariant, ftInterface, ftIDispatch, ftGuid, ftTimeStamp, ftFMTBcd, // 32..37
+//    ftFixedWideChar, ftWideMemo, ftOraTimeStamp, ftOraInterval, // 38..41
+//    ftLongWord, ftShortint, ftByte, ftExtended, ftConnection, ftParams, ftStream, //42..48
+//    ftTimeStampOffset, ftObject, ftSingle); //49..51
+
+  qrySQL.Open(Request);
+
+  case FieldType of
+    ftString, ftWideString:
+      begin
+
+      end;
+
+    ftSmallint, ftInteger, ftWord:
+      begin
+
+      end;
+
+    ftBoolean:
+      begin
+
+      end;
+
+    ftFloat, ftCurrency, ftExtended, ftBCD:
+      begin
+
+      end;
+
+    ftDate, ftTime, ftDateTime:
+      begin
+
+      end;
+  end;
+end;
+
 function TVBServerMethods.GetFileVersion(Request: string; var Response: string): string;
 var
-  SL, SLIni: TStringList;
+  InputList, IniList: TStringList;
   SourceFileTimeStamp, TargetFileTimeStamp: TDateTime;
   Folder, {aFileName, }SourceFileName, SourceTimeStampStr, TargetTimeStampStr: string;
   IniFile: TIniFile;
   ComputerName: string;
 //  RegKey: TRegistry;
 begin
-  SL := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SLIni := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+  IniList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
 //  RegKey := TRegistry.Create(KEY_ALL_ACCESS);
 //  RegKey := System.Win.Registry.TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
 //  RegKey.RootKey := HKEY_CURRENT_USER;
   IniFile := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'VSServiceX.ini');
 
   try
-    SL.DelimitedText := Request;
+    InputList.DelimitedText := Request;
 //    SL.Add('RootKey: ' + IntToStr(RegKey.RootKey));
 //    SL.SaveToFile('C:\Data\Download Info.txt');
 
-    IniFile.ReadSectionValues(KEY_RESOURCE, SLIni);
+    IniFile.ReadSectionValues(KEY_RESOURCE, IniList);
     ComputerName := RUtils.GetComputer;
 
     if not IniFile.ValueExists(KEY_RESOURCE, 'VB Shell Repository') then
@@ -499,7 +556,7 @@ begin
 //    TDirectory.CreateDirectory(Folder);
 //    RegKey.CloseKey;
 
-    SourceFileName := Folder + SL.Values['FILE_NAME'];
+    SourceFileName := Folder + InputList.Values['FILE_NAME'];
     if not TFile.Exists(SourceFileName, True) then
     begin
       Response := 'RESPONSE=FILE_NOT_FOUND';
@@ -513,7 +570,7 @@ begin
     //  Note to developer: DON'T USE THE DateTimeToStr function!! For some reason
     // even if the locale settings for date format have been set it still reads
     // this info in mm/dd/yyyy and NOT dd/mm/yyyy format.
-    TargetFileTimeStamp := VarToDateTime(SL.Values['TARGET_FILE_TIMESTAMP']);
+    TargetFileTimeStamp := VarToDateTime(InputList.Values['TARGET_FILE_TIMESTAMP']);
     TargetTimeStampStr := FormatDateTime('yyyy-MM-dd hh:mm:ss', TargetFileTimeStamp);
     // If the source file cannot be found, then abort.
 //    if not TFile.Exists(SourceFileName, True) then
@@ -537,8 +594,8 @@ begin
     else
       Result := 'RESPONSE=NEW_VERSION_NOT_FOUND';
   finally
-    SL.Free;
-    SLIni.Free;
+    InputList.Free;
+    IniList.Free;
     IniFile.Free;
 //    RegKey.Free;
   end;
@@ -588,67 +645,8 @@ begin
   Result.Position := 0;
 end;
 
-// SOAP Method for downloading files
-//function TVBServerMethods.DownloadFile(Request: string; var Response: string): TByteDynArray;
-//var
-//  MemStream: TMemoryStream;
-//  SL: TStringList;
-//  Folder, aFileName: string;
-//  RegKey: TRegistry;
-//begin
-//  SL := RUtils.CreateStringList(SL, PIPE);
-//  RegKey := TRegistry.Create(KEY_ALL_ACCESS);
-//  MemStream := TMemoryStream.Create;
-//  try
-//    SL.DelimitedText := Request;
-//    //    ProcessRegistry;
-//    RegKey.RootKey := HKEY_CURRENT_USER;
-//    RegKey.OpenKey(KEY_COMMON_RESOURCE_FILES, True);
-//
-//    if not RegKey.ValueExists('RC Shell Resource Files') then
-//      RegKey.WriteString('RC Shell Resource Files', '\\RC-FS-2012\Apps\RC Shell\');
-//
-//    Folder := RegKey.ReadString('RC Shell Resource Files') + Folder;
-//    // Make sure these folders exist
-////    TDirectory.CreateDirectory(Folder + 'Applications\');
-////    TDirectory.CreateDirectory(Folder + 'Installers\');
-//    TDirectory.CreateDirectory(Folder + 'Resources\');
-//    //    TDirectory.CreateDirectory(Folder + 'Documents\');
-//    RegKey.CloseKey;
-//
-//    case StrToInt(SL.Values['FILE_TYPE']) of
-//      1: Folder := Folder + 'Applications\';
-//      2: Folder := Folder + 'Installers\';
-//      3: Folder := Folder + 'Resources\';
-//      4: Folder := Folder + 'Documents\';
-//    end;
-//
-//    aFileName := Folder + SL.Values['FILE_NAME'];
-//    if not TFile.Exists(aFileName, True) then
-//    begin
-//      // Return a zero length byte array to client.
-//      SetLength(Result, 0);
-//      Exit;
-//    end;
-//
-//    // Load file into stream
-//    MemStream.LoadFromFile(aFileName);
-//    // Set size of byte array to send back to client
-//    SetLength(Result, MemStream.Size);
-//    // Make sure we begin reading at beginning of stream
-//    MemStream.Position := 0;
-//    // Read stream into byte array
-//    MemStream.Read(Result[0], MemStream.Size);
-//  finally
-//    MemStream.Position := 0;
-//    MemStream.Free;
-//    SL.Free;
-//    RegKey.Free;
-//  end;
-//end;
-
 initialization
-  // Specify full path to source otherwise it will try to use the RegistrClass
+  // Specify full path to source otherwise it will try to use the RegisterClass
   // method from the WinApi.Windows unit.
   System.Classes.RegisterClass(Query);
 

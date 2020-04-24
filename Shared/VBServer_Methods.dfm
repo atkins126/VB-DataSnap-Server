@@ -27,7 +27,9 @@ object VBServerMethods: TVBServerMethods
     FormatOptions.DataSnapCompatibility = True
     ResourceOptions.AssignedValues = [rvCmdExecMode, rvAutoReconnect]
     ResourceOptions.AutoReconnect = True
+    UpdateOptions.AssignedValues = [uvAutoCommitUpdates]
     LoginPrompt = False
+    Transaction = trnFB
     OnError = conFBError
     BeforeConnect = conFBBeforeConnect
     Left = 30
@@ -73,5 +75,10 @@ object VBServerMethods: TVBServerMethods
     StoredProcName = 'SP_GEN_BILLABLE_SUMMARY_TABLE'
     Left = 240
     Top = 20
+  end
+  object trnFB: TFDTransaction
+    Connection = conFB
+    Left = 30
+    Top = 75
   end
 end
