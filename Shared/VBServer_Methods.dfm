@@ -5,8 +5,6 @@ object VBServerMethods: TVBServerMethods
   Height = 389
   Width = 716
   object conFB: TFDConnection
-    Params.Strings = (
-      'ConnectionDef=VB Live')
     FetchOptions.AssignedValues = [evDetailDelay]
     FetchOptions.DetailDelay = 400
     FormatOptions.AssignedValues = [fvMapRules, fvDataSnapCompatibility]
@@ -79,6 +77,11 @@ object VBServerMethods: TVBServerMethods
   object trnFB: TFDTransaction
     Connection = conFB
     Left = 30
+    Top = 75
+  end
+  object qryInsert: TFDQuery
+    Connection = conFB
+    Left = 95
     Top = 75
   end
 end

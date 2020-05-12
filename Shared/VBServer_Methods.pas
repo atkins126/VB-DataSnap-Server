@@ -32,6 +32,7 @@ type
     cmdGeneric: TFDCommand;
     sprGeneric: TFDStoredProc;
     trnFB: TFDTransaction;
+    qryInsert: TFDQuery;
     procedure DSServerModuleCreate(Sender: TObject);
     procedure DSServerModuleDestroy(Sender: TObject);
     procedure conFBBeforeConnect(Sender: TObject);
@@ -39,21 +40,18 @@ type
   private
     { Private declarations }
     FErrorMsg: string;
-    FSLObject: TStringList;
-
-    property SLObject: TStringList read FSLObject write FSLObject;
-    property ErrorMsg: string read FErrorMsg write FErrorMsg;
+    FObjectList: TStringList;
 
     function ParseServerErrorMsg(ServerErrorMsg: string): string;
   public
     { Public declarations }
     function GetData(Request, ParameterList, Generatorname, Tablename, DataSetName: string; var Response: string): TFDJSONDataSets;
     function ExecuteSQLCommand(Request: string): string;
+    function ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
     function GetFileVersion(Request: string; var Response: string): string;
     function DownloadFile(Request: string; var Response: string; var Size: Int64): TStream;
-    function TestType(Request: string; var Response: string): string;
+    function InsertRecord(Request: string; var Response: string): string;
     function EchoString(Request: string; var Response: string): string;
-    function ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
     function GetNextID(GeneratorName: string): string;
     function GetUseCount(Request: string): string;
     function GetFieldValue(Request: string; FieldType: TFieldType): string;
@@ -77,22 +75,28 @@ uses
 
 procedure TVBServerMethods.DSServerModuleCreate(Sender: TObject);
 begin
-  FSLObject := TStringList.Create;
+  FObjectList := TStringList.Create;
 end;
 
 procedure TVBServerMethods.DSServerModuleDestroy(Sender: TObject);
 begin
-  FSLObject.Free;
+  FObjectList.Free;
 end;
 
-function TVBServerMethods.TestType(Request: string; var Response: string): string;
+function TVBServerMethods.InsertRecord(Request: string; var Response: string): string;
 var
   InputList: TStringList;
 begin
-  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  InputList.DelimitedText := Request;
-  Result := InputList.Values['REQUEST'];
-  Response := 'SUCCESS';
+  try
+    qrySQL.Open(Request);
+    Response := 'RESPONSE=SUCCESS';
+    Result := IntToStr(qrySQL.FieldByName('ID').AsInteger);
+  except on E: Exception do
+    begin
+      Result := 'RESPONSE=ERROR' + PIPE + 'ERROR_MESSAGE=' + E.Message;
+      conFB.Rollback;
+    end;
+  end;
 end;
 
 function TVBServerMethods.GetData(Request, ParameterList, Generatorname, Tablename, DataSetName: string; var Response: string): TFDJSONDataSets;
@@ -114,11 +118,11 @@ begin
   }
 
   Response := '';
-  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  ScriptIDList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
-  ParameterListing := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  SingleParameter := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
-  DataSetNameList := RUtils.CreateStringList(SEMI_COLON, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
+  ScriptIDList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
+  ParameterListing := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
+  SingleParameter := RUtils.CreateStringList(SEMI_COLON, DOUBLE_QUOTE);
+  DataSetNameList := RUtils.CreateStringList(SEMI_COLON, DOUBLE_QUOTE);
 
   try
     InputList.DelimitedText := Request;
@@ -132,7 +136,7 @@ begin
     // Create the Dataset list that will contain the data to be passed back to
     // the client.
     Result := TFDJSONDataSets.Create;
-    FSLObject.Clear;
+    FObjectList.Clear;
 
     ScriptIDList.DelimitedText := InputList.Values['SQL_STATEMENT_ID'];
     // Iterate the list of ID's to retriev the SQL Statements.
@@ -171,14 +175,16 @@ begin
       Query.FilterOptions := [foCaseInsensitive];
       Query.FormatOptions.DataSnapCompatibility := True;
 
-      FSLObject.Add(ComponentToString(Query));
-      Query := (StringToComponent(FSLObject[I]) as TFDQuery);
+      FObjectList.Add(ComponentToString(Query));
+      Query := (StringToComponent(FObjectList[I]) as TFDQuery);
       SQL := qrySQL.FieldByName('SQL_STATEMENT').AsString;
 
       if SingleParameter.Count > 0 then
         SQL := Format(SQL, BuildFormatArray(SingleParameter.Count, SingleParameter));
 
       Query.Open(SQL);
+      Response := 'DATA_FOUND';
+
       if Query.IsEmpty then
         Response := 'NO_DATA';
       // Add the data to the dataset list to be returned to the client.
@@ -197,15 +203,15 @@ function TVBServerMethods.ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var R
 var
   LApply: IFDJSONDeltasApplyUpdates;
   ListCount, I, ErrorCount: Integer;
-  S, SQL {, ErrorMsg}: string;
+  S, SQL {, FErrorMsg}: string;
   Query: TFDQuery;
   ApplyErrors: TFDJSONErrors;
   ErrorList: TStringList;
 begin
   Result := '';
-  ErrorMsg := '';
+  FErrorMsg := '';
   ErrorCount := 0;
-  ErrorList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  ErrorList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
 
   // Create the apply object and populate it with the delta from the
   // FDMemTable(s) generated by the client.
@@ -214,7 +220,7 @@ begin
   ListCount := LApply.Count;
 
 //  conFB.StartTransaction;
-  FSLObject.Clear;
+  FObjectList.Clear;
 
   try
     for I := 0 to ListCount - 1 do
@@ -238,9 +244,9 @@ begin
       Query.FormatOptions.DataSnapCompatibility := True;
 
       // Render the query component to it's string representation.
-      FSLObject.Add(ComponentToString(Query));
+      FObjectList.Add(ComponentToString(Query));
       // Now set the query to the correct one for applying updates.
-      Query := (StringToComponent(FSLObject[I]) as TFDQuery);
+      Query := (StringToComponent(FObjectList[I]) as TFDQuery);
 
       if Length(Trim(GeneratorName)) > 0 then
         Query.UpdateOptions.Generatorname := GeneratorName;
@@ -273,7 +279,7 @@ begin
 
 //      except
 //        begin
-////          ErrorMsg := ErrorMsg + ' ' + E.Message;
+////          FErrorMsg := FErrorMsg + ' ' + E.Message;
 //          conFB.Rollback;
 //        end;
 //      end;
@@ -283,7 +289,7 @@ begin
 ////      except on E: Exception do
 //      except on E: EIBNativeException {EFDDBEngineException} do // on E: EIBNativeException do
 //        begin
-//          ErrorMsg := ErrorMsg + ' ' + E.Message;
+//          FErrorMsg := FErrorMsg + ' ' + E.Message;
 //          conFB.Rollback;
 //        end;
 //      end;
@@ -307,8 +313,9 @@ function TVBServerMethods.ParseServerErrorMsg(ServerErrorMsg: string): string;
 var
   Posn: Integer;
 begin
-  Result := '';
+  Result := ServerErrorMsg;
   Posn := Pos(AnsiUpperCase('violation of primary'), AnsiUpperCase(ServerErrorMsg));
+
   if Posn > 0 then
   begin
     Result := 'Violation of primary key on table: %s ';
@@ -332,7 +339,7 @@ function TVBServerMethods.ExecuteSQLCommand(Request: string): string;
 //var
 //  InputList: TStringList;
 begin
-//  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
+//  InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
 //  InputList.DelimitedText := Request;
 
   cmdGeneric.CommandText.Clear;
@@ -361,7 +368,7 @@ var
 begin
   Result := 'RESPONSE=SUCCESS';
 
-  InputList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
   try
     if Length(Trim(ParameterList)) > 0 then
     begin
@@ -371,17 +378,6 @@ begin
       sprGeneric.Params.Clear;
       sprGeneric.StoredProcName := ProcedureName;
       sprGeneric.Prepare;
-
-//    for I := 0 to SL.Count - 1 do
-//    begin
-//      Param := sprGeneric.Params.Add;
-//      Param.ParamType := ptInput;
-//      Param.DataType := ftInteger;
-//      Param.Value := SL[I];
-//    end;
-//
-//  sprGeneric.Params[0].Name := 'USER_ID';
-//  sprGeneric.Params[1].Name := 'THE_PERIOD';
 
       if SameText(ProcedureName, 'SP_GEN_BILLABLE_SUMMARY_TABLE') then
       begin
@@ -397,14 +393,9 @@ begin
   end;
 
   try
-//      conFB.StartTransaction;
     sprGeneric.Execute;
-//      conFB.Commit;
   except on E: Exception do
-    begin
-      Result := 'RESPONSE=ERROR|ERROR_MSG=' + E.Message;
-//        conFB.Rollback;
-    end;
+      Result := 'RESPONSE=ERROR|ERROR_MESSAGE=' + E.Message;
   end;
 end;
 
@@ -418,7 +409,7 @@ begin
 //  conFB.Params.LoadFromFile('C:\Data\Firebird\VB\ConnectionDefinitions.ini');
 //  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
 
-  IniList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  IniList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
   SectionName := 'VB';
   ConIniFile := TIniFile.Create(CONNECTION_DEFINITION_FILE);
 
@@ -427,7 +418,7 @@ begin
       SectionName := 'VB Dev';
 
     ConIniFile.ReadSectionValues(SectionName, IniList);
-    conFB.Params.Values['Driver'] := IniList.Values['DriverID'];
+    conFB.Params.Values['DriverID'] := IniList.Values['DriverID'];
     conFB.Params.Values['Server'] := IniList.Values['Server'];
     conFB.Params.Values['Database'] := IniList.Values['Database'];
     conFB.Params.Values['User_Name'] := IniList.Values['User_Name'];
@@ -511,8 +502,8 @@ var
   ComputerName: string;
 //  RegKey: TRegistry;
 begin
-  InputList := RUtils.CreateStringList(PIPE, SINGLE_QUOTE);
-  IniList := RUtils.CreateStringList(COMMA, SINGLE_QUOTE);
+  InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
+  IniList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
 //  RegKey := TRegistry.Create(KEY_ALL_ACCESS);
 //  RegKey := System.Win.Registry.TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
 //  RegKey.RootKey := HKEY_CURRENT_USER;
