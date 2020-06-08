@@ -21,7 +21,7 @@ uses
   FireDAC.Phys.IB, FireDAC.Phys.FB, FireDAC.Phys.FBDef, FireDAC.Phys.IBWrapper;
 
 type
-  {$METHODINFO ON}
+{$METHODINFO ON}
   TVBServerMethods = class(TDSServerModule)
     conFB: TFDConnection;
     FDGUIxWaitCursor: TFDGUIxWaitCursor;
@@ -50,7 +50,7 @@ type
     function ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
     function GetFileVersion(Request: string; var Response: string): string;
     function DownloadFile(Request: string; var Response: string; var Size: Int64): TStream;
-    function InsertRecord(Request: string; var Response: string): string;
+    function ModifyRecord(Request: string; var Response: string): string;
     function EchoString(Request: string; var Response: string): string;
     function GetNextID(GeneratorName: string): string;
     function GetUseCount(Request: string): string;
@@ -59,7 +59,7 @@ type
     function ApplyDataUpdates(const DeltaList: TFDJSONDeltas; var ReplyMessage: string;
       GeneratorName, TableName: string; ScriptID: Integer): string;
   end;
-  {$METHODINFO Off}
+{$METHODINFO Off}
 
   Query = class(TFDQuery);
 
@@ -83,17 +83,31 @@ begin
   FObjectList.Free;
 end;
 
-function TVBServerMethods.InsertRecord(Request: string; var Response: string): string;
+function TVBServerMethods.ModifyRecord(Request: string; var Response: string): string;
 var
   InputList: TStringList;
+  DBAction: string;
 begin
   try
-    qrySQL.Open(Request);
+    DBAction := Response;
+    Result := '0';
+
+    if SameText(DBAction, 'INSERT') then
+    begin
+      qrySQL.Open(Request);
+      Result := IntToStr(qrySQL.FieldByName('ID').AsInteger);
+    end
+    else
+    begin
+      qrySQL.SQL.Clear;
+      qrySQL.SQL.Text := Request;
+      qrySQL.ExecSQL(Request);
+    end;
+
     Response := 'RESPONSE=SUCCESS';
-    Result := IntToStr(qrySQL.FieldByName('ID').AsInteger);
   except on E: Exception do
     begin
-      Result := 'RESPONSE=ERROR' + PIPE + 'ERROR_MESSAGE=' + E.Message;
+      Response := 'RESPONSE=ERROR' + PIPE + 'ERROR_MESSAGE=' + E.Message;
       conFB.Rollback;
     end;
   end;
@@ -142,11 +156,13 @@ begin
     // Iterate the list of ID's to retriev the SQL Statements.
     for I := 0 to ScriptIDList.Count - 1 do
     begin
-      qrySQL.Open(Format(SQL_STATEMENT, [ScriptIDList[I]]));
+      SQL := Format(SQL_STATEMENT, [ScriptIDList[I]]);
+      qrySQL.Open(SQL);
       // Code added by CVG on 26/06/2019. This is to accommodate datasets
       // with different names but getting their data from the same DB table
       // on the client side.
       DataSetNameList.DelimitedText := qrySQL.FieldByName('DATASET_NAME').AsString;
+
       for X := 0 to DataSetNameList.Count - 1 do
         if SameText(DataSetName, DataSetNameList[X]) then
         begin
@@ -219,7 +235,7 @@ begin
   // Get a count of the number of datasets to be updated.
   ListCount := LApply.Count;
 
-//  conFB.StartTransaction;
+  //  conFB.StartTransaction;
   FObjectList.Clear;
 
   try
@@ -228,7 +244,7 @@ begin
       // Get the Query name for the dataset that is used to transact.
       S := LApply.Items[I].Key;
 
-//      SQL := Format(SQL_DATASET_NAME, [AnsiQuotedStr(AnsiUpperCase(S), '''')]);
+      //      SQL := Format(SQL_DATASET_NAME, [AnsiQuotedStr(AnsiUpperCase(S), '''')]);
       SQL := Format(SQL_STATEMENT, [ScriptID.ToString]);
 
       // Get the SQL statement used to generate field data.
@@ -269,30 +285,30 @@ begin
       ApplyErrors := LApply.Errors;
       ErrorList.AddStrings(ApplyErrors.Strings)
 
-//      Result := ErrorList.Text;
-//      Result := ParseServerErrorMsg(ErrorList.Text);
+      //      Result := ErrorList.Text;
+      //      Result := ParseServerErrorMsg(ErrorList.Text);
 
-//      if ErrorCount = 0 then
-//        conFB.Commit
-//      else
-//        conFB.Rollback;
+      //      if ErrorCount = 0 then
+      //        conFB.Commit
+      //      else
+      //        conFB.Rollback;
 
-//      except
-//        begin
-////          FErrorMsg := FErrorMsg + ' ' + E.Message;
-//          conFB.Rollback;
-//        end;
-//      end;
+      //      except
+      //        begin
+      ////          FErrorMsg := FErrorMsg + ' ' + E.Message;
+      //          conFB.Rollback;
+      //        end;
+      //      end;
 
-//      try
-//        ErrorCount := LApply.ApplyUpdates(S, Query.Command);
-////      except on E: Exception do
-//      except on E: EIBNativeException {EFDDBEngineException} do // on E: EIBNativeException do
-//        begin
-//          FErrorMsg := FErrorMsg + ' ' + E.Message;
-//          conFB.Rollback;
-//        end;
-//      end;
+      //      try
+      //        ErrorCount := LApply.ApplyUpdates(S, Query.Command);
+      ////      except on E: Exception do
+      //      except on E: EIBNativeException {EFDDBEngineException} do // on E: EIBNativeException do
+      //        begin
+      //          FErrorMsg := FErrorMsg + ' ' + E.Message;
+      //          conFB.Rollback;
+      //        end;
+      //      end;
     end;
 
     if ErrorCount > 0 then
@@ -300,12 +316,12 @@ begin
     else
       Result := 'RESPONSE=SUCCESS';
 
-//    if ErrorCount = 0 then
-//      conFB.Commit
-//    else
-//      conFB.Rollback;
+    //    if ErrorCount = 0 then
+    //      conFB.Commit
+    //    else
+    //      conFB.Rollback;
   finally
-//    Result := FErrorMsg;
+    //    Result := FErrorMsg;
   end;
 end;
 
@@ -339,13 +355,13 @@ function TVBServerMethods.ExecuteSQLCommand(Request: string): string;
 //var
 //  InputList: TStringList;
 begin
-//  InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
-//  InputList.DelimitedText := Request;
+  //  InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
+  //  InputList.DelimitedText := Request;
 
   cmdGeneric.CommandText.Clear;
   cmdGeneric.CommandText.Add(Request);
-//  cmdGeneric.CommandText.Add(InputList.Values['REQUEST']);
-//  try
+  //  cmdGeneric.CommandText.Add(InputList.Values['REQUEST']);
+  //  try
   conFB.StartTransaction;
   try
     cmdGeneric.Execute;
@@ -357,9 +373,9 @@ begin
       conFB.Rollback;
     end;
   end;
-//  finally
-//    InputList.Free;
-//  end;
+  //  finally
+  //    InputList.Free;
+  //  end;
 end;
 
 function TVBServerMethods.ExecuteStoredProcedure(ProcedureName, ParameterList: string): string;
@@ -405,9 +421,9 @@ var
   IniList: TStringList;
   SectionName: string;
 begin
-//  conFB.Params.Clear;
-//  conFB.Params.LoadFromFile('C:\Data\Firebird\VB\ConnectionDefinitions.ini');
-//  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
+  //  conFB.Params.Clear;
+  //  conFB.Params.LoadFromFile('C:\Data\Firebird\VB\ConnectionDefinitions.ini');
+  //  conFB.Params.LoadFromFile(CONNECTION_DEFINITION_FILE { + 'ConnectionDefinitions.ini'});
 
   IniList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
   SectionName := 'VB';
@@ -453,15 +469,15 @@ end;
 function TVBServerMethods.GetFieldValue(Request: string; FieldType: TFieldType): string;
 begin
 
-//  TFieldType = (ftUnknown, ftString, ftSmallint, ftInteger, ftWord, // 0..4
-//    ftBoolean, ftFloat, ftCurrency, ftBCD, ftDate, ftTime, ftDateTime, // 5..11
-//    ftBytes, ftVarBytes, ftAutoInc, ftBlob, ftMemo, ftGraphic, ftFmtMemo, // 12..18
-//    ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, ftFixedChar, ftWideString, // 19..24
-//    ftLargeint, ftADT, ftArray, ftReference, ftDataSet, ftOraBlob, ftOraClob, // 25..31
-//    ftVariant, ftInterface, ftIDispatch, ftGuid, ftTimeStamp, ftFMTBcd, // 32..37
-//    ftFixedWideChar, ftWideMemo, ftOraTimeStamp, ftOraInterval, // 38..41
-//    ftLongWord, ftShortint, ftByte, ftExtended, ftConnection, ftParams, ftStream, //42..48
-//    ftTimeStampOffset, ftObject, ftSingle); //49..51
+  //  TFieldType = (ftUnknown, ftString, ftSmallint, ftInteger, ftWord, // 0..4
+  //    ftBoolean, ftFloat, ftCurrency, ftBCD, ftDate, ftTime, ftDateTime, // 5..11
+  //    ftBytes, ftVarBytes, ftAutoInc, ftBlob, ftMemo, ftGraphic, ftFmtMemo, // 12..18
+  //    ftParadoxOle, ftDBaseOle, ftTypedBinary, ftCursor, ftFixedChar, ftWideString, // 19..24
+  //    ftLargeint, ftADT, ftArray, ftReference, ftDataSet, ftOraBlob, ftOraClob, // 25..31
+  //    ftVariant, ftInterface, ftIDispatch, ftGuid, ftTimeStamp, ftFMTBcd, // 32..37
+  //    ftFixedWideChar, ftWideMemo, ftOraTimeStamp, ftOraInterval, // 38..41
+  //    ftLongWord, ftShortint, ftByte, ftExtended, ftConnection, ftParams, ftStream, //42..48
+  //    ftTimeStampOffset, ftObject, ftSingle); //49..51
 
   qrySQL.Open(Request);
 
@@ -500,19 +516,19 @@ var
   Folder, {aFileName, }SourceFileName, SourceTimeStampStr, TargetTimeStampStr: string;
   IniFile: TIniFile;
   ComputerName: string;
-//  RegKey: TRegistry;
+  //  RegKey: TRegistry;
 begin
   InputList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
   IniList := RUtils.CreateStringList(COMMA, DOUBLE_QUOTE);
-//  RegKey := TRegistry.Create(KEY_ALL_ACCESS);
-//  RegKey := System.Win.Registry.TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
-//  RegKey.RootKey := HKEY_CURRENT_USER;
+  //  RegKey := TRegistry.Create(KEY_ALL_ACCESS);
+  //  RegKey := System.Win.Registry.TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
+  //  RegKey.RootKey := HKEY_CURRENT_USER;
   IniFile := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'VSServiceX.ini');
 
   try
     InputList.DelimitedText := Request;
-//    SL.Add('RootKey: ' + IntToStr(RegKey.RootKey));
-//    SL.SaveToFile('C:\Data\Download Info.txt');
+    //    SL.Add('RootKey: ' + IntToStr(RegKey.RootKey));
+    //    SL.SaveToFile('C:\Data\Download Info.txt');
 
     IniFile.ReadSectionValues(KEY_RESOURCE, IniList);
     ComputerName := RUtils.GetComputer;
@@ -522,30 +538,30 @@ begin
 
     Folder := IniFile.ReadString(KEY_RESOURCE, 'VB Shell Repository', '\\' + ComputerName + '\Data\VB\Repository\');
 
-//    if not IniFile.ValueExists(KEY_RESOURCE, 'VB Shell Repository') then
-//      IniFile.WriteString(KEY_RESOURCE, 'VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
-//
-//    Folder := IniFile.ReadString(KEY_RESOURCE, 'VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
-//    SLIni.Add('Folder; ' + Folder);
-//    SLIni.SaveToFile('C:\Data\File Info.txt');
+    //    if not IniFile.ValueExists(KEY_RESOURCE, 'VB Shell Repository') then
+    //      IniFile.WriteString(KEY_RESOURCE, 'VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
+    //
+    //    Folder := IniFile.ReadString(KEY_RESOURCE, 'VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
+    //    SLIni.Add('Folder; ' + Folder);
+    //    SLIni.SaveToFile('C:\Data\File Info.txt');
 
-    // Make sure these folders exist
+        // Make sure these folders exist
     TDirectory.CreateDirectory(Folder);
 
-////    RegKey.OpenKey(KEY_RESOURCE, True);
-//    RegKey.OpenKey(IntToStr(Regkey.RootKey) + KEY_RESOURCE, True);
-//    SL.Add('KEY_RESOURCE: ' + KEY_RESOURCE);
-//    SL.SaveToFile('C:\Data\Download Info.txt');
-//
-//    if not RegKey.ValueExists('VB Shell Repository') then
-//      RegKey.WriteString('VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
-//
-//    Folder := RegKey.ReadString('VB Shell Repository');
-//    SL.SaveToFile('C:\Data\Download Info.txt');
-//
-//    // Make sure these folders exist
-//    TDirectory.CreateDirectory(Folder);
-//    RegKey.CloseKey;
+    ////    RegKey.OpenKey(KEY_RESOURCE, True);
+    //    RegKey.OpenKey(IntToStr(Regkey.RootKey) + KEY_RESOURCE, True);
+    //    SL.Add('KEY_RESOURCE: ' + KEY_RESOURCE);
+    //    SL.SaveToFile('C:\Data\Download Info.txt');
+    //
+    //    if not RegKey.ValueExists('VB Shell Repository') then
+    //      RegKey.WriteString('VB Shell Repository', '\\VBSERVER\Data\VB\Repository\');
+    //
+    //    Folder := RegKey.ReadString('VB Shell Repository');
+    //    SL.SaveToFile('C:\Data\Download Info.txt');
+    //
+    //    // Make sure these folders exist
+    //    TDirectory.CreateDirectory(Folder);
+    //    RegKey.CloseKey;
 
     SourceFileName := Folder + InputList.Values['FILE_NAME'];
     if not TFile.Exists(SourceFileName, True) then
@@ -554,13 +570,13 @@ begin
       Exit;
     end;
 
-//    SourceFileName := Folder + SL.Values['FILE_NAME'];
-    // Get the target file name sent by the client. This is the file on the
-    // client side that needs to be updated.
-    // Get the timestamp of this file.
-    //  Note to developer: DON'T USE THE DateTimeToStr function!! For some reason
-    // even if the locale settings for date format have been set it still reads
-    // this info in mm/dd/yyyy and NOT dd/mm/yyyy format.
+    //    SourceFileName := Folder + SL.Values['FILE_NAME'];
+        // Get the target file name sent by the client. This is the file on the
+        // client side that needs to be updated.
+        // Get the timestamp of this file.
+        //  Note to developer: DON'T USE THE DateTimeToStr function!! For some reason
+        // even if the locale settings for date format have been set it still reads
+        // this info in mm/dd/yyyy and NOT dd/mm/yyyy format.
     TargetFileTimeStamp := VarToDateTime(InputList.Values['TARGET_FILE_TIMESTAMP']);
     TargetTimeStampStr := FormatDateTime('yyyy-MM-dd hh:mm:ss', TargetFileTimeStamp);
     // If the source file cannot be found, then abort.
@@ -588,7 +604,7 @@ begin
     InputList.Free;
     IniList.Free;
     IniFile.Free;
-//    RegKey.Free;
+    //    RegKey.Free;
   end;
 end;
 
