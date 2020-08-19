@@ -19,6 +19,7 @@ begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   TStyleManager.TrySetStyle('Iceberg Classico');
+  Application.Title := 'VB Apps';
   Application.CreateForm(TVBServerContainer, VBServerContainer);
   Application.CreateForm(TMainFrm, MainFrm);
   Application.Run;

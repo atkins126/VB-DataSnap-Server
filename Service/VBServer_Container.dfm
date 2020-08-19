@@ -1,16 +1,18 @@
 object VBDSServerX: TVBDSServerX
   OldCreateOrder = False
+  OnCreate = ServiceCreate
   DisplayName = 'VB DataSnap Service X'
   AfterInstall = ServiceAfterInstall
   OnStart = ServiceStart
   Height = 271
   Width = 415
   object DSServer: TDSServer
+    AutoStart = False
     Left = 96
     Top = 11
   end
   object DSTCPServerTransport: TDSTCPServerTransport
-    Port = 20255
+    Port = 20210
     Server = DSServer
     Filters = <
       item
@@ -35,9 +37,9 @@ object VBDSServerX: TVBDSServerX
     Top = 73
   end
   object DSHTTPService: TDSHTTPService
-    HttpPort = 20260
+    HttpPort = 20215
     Server = DSServer
-    DSPort = 20255
+    DSPort = 20210
     Filters = <
       item
         FilterId = 'PC1'

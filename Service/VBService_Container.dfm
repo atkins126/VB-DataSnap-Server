@@ -37,6 +37,7 @@ object VBDSService: TVBDSService
   object DSHTTPService: TDSHTTPService
     HttpPort = 20275
     Server = DSServer
+    DSPort = 20270
     Filters = <
       item
         FilterId = 'PC1'

@@ -16,15 +16,17 @@ type
     DSHTTPService: TDSHTTPService;
     DSAuthenticationManager: TDSAuthenticationManager;
     DSServerClass: TDSServerClass;
-    procedure DSServerClassGetClass(DSServerClass: TDSServerClass;
-      var PersistentClass: TPersistentClass);
-    procedure DSAuthenticationManagerUserAuthorize(Sender: TObject;
-      EventObject: TDSAuthorizeEventObject; var valid: Boolean);
-    procedure DSAuthenticationManagerUserAuthenticate(Sender: TObject;
-      const Protocol, Context, User, Password: string; var valid: Boolean;
-      UserRoles: TStrings);
     procedure ServiceStart(Sender: TService; var Started: Boolean);
     procedure ServiceAfterInstall(Sender: TService);
+
+    procedure DSServerClassGetClass(DSServerClass: TDSServerClass;
+      var PersistentClass: TPersistentClass);
+
+    procedure DSAuthenticationManagerUserAuthorize(Sender: TObject;
+      EventObject: TDSAuthorizeEventObject; var valid: Boolean);
+
+    procedure DSAuthenticationManagerUserAuthenticate(Sender: TObject;
+      const Protocol, Context, User, Password: string; var valid: Boolean;      UserRoles: TStrings);
   private
     { Private declarations }
   protected

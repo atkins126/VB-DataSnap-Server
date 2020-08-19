@@ -68,9 +68,9 @@ object VBServerMethods: TVBServerMethods
   object sprGeneric: TFDStoredProc
     ActiveStoredUsage = [auDesignTime]
     Connection = conFB
-    ResourceOptions.AssignedValues = [rvStorePrettyPrint]
+    ResourceOptions.AssignedValues = [rvUnifyParams, rvStorePrettyPrint]
     ResourceOptions.StorePrettyPrint = True
-    StoredProcName = 'SP_GEN_BILLABLE_SUMMARY_TABLE'
+    ResourceOptions.UnifyParams = True
     Left = 240
     Top = 20
   end

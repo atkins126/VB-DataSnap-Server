@@ -1,14 +1,16 @@
 object VBServerContainer: TVBServerContainer
   OldCreateOrder = False
+  OnCreate = DataModuleCreate
   OnDestroy = DataModuleDestroy
   Height = 271
   Width = 415
   object DSServer: TDSServer
+    AutoStart = False
     Left = 96
     Top = 11
   end
   object DSTCPServerTransport: TDSTCPServerTransport
-    Port = 20256
+    Port = 2020
     Server = DSServer
     Filters = <
       item
@@ -33,9 +35,9 @@ object VBServerContainer: TVBServerContainer
     Top = 73
   end
   object DSHTTPService: TDSHTTPService
-    HttpPort = 20261
+    HttpPort = 2025
     Server = DSServer
-    DSPort = 20256
+    DSPort = 2020
     Filters = <
       item
         FilterId = 'PC1'
